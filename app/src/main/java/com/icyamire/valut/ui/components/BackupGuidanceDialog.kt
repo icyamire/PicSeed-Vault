@@ -80,7 +80,7 @@ fun BackupGuidanceDialog(
         },
         title = {
             Text(
-                text = "Backup Instructions & Directory Checklist",
+                text = "PicSeed Vault - Backup Instructions",
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
             )
         },
@@ -91,7 +91,7 @@ fun BackupGuidanceDialog(
                     .verticalScroll(scrollState),
             ) {
                 Text(
-                    text = "To recreate this exact wallet seed in the future, you must keep all parameters identical:",
+                    text = "To recreate this exact wallet seed in PicSeed Vault in the future, you must keep all parameters identical:",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -286,7 +286,7 @@ fun BackupGuidanceDialog(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "I understand that I must save these exact files in order along with my PIN to restore this wallet.",
+                        text = "I understand that I must save these exact files in order along with my PIN to restore this PicSeed Vault wallet.",
                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(end = 8.dp),

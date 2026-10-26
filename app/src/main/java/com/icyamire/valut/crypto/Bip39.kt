@@ -30,9 +30,11 @@ object Bip39 {
             }
         }
 
-        val checksumByte = hash[0].toInt() and 0xFF
-        for (i in 7 downTo (8 - csBits)) {
-            bitArray[bitIndex++] = ((checksumByte shr i) and 1) == 1
+        for (i in 0 until csBits) {
+            val byteIdx = i / 8
+            val bitPos = 7 - (i % 8)
+            val bit = ((hash[byteIdx].toInt() and 0xFF) shr bitPos) and 1
+            bitArray[bitIndex++] = (bit == 1)
         }
 
         // Convert every 11 bits into a word index
@@ -47,6 +49,53 @@ object Bip39 {
         }
 
         return words.joinToString(" ")
+    }
+
+    fun validateMnemonic(mnemonic: String): Boolean {
+        return try {
+            val words = mnemonic.trim().split("\\s+".toRegex())
+            if (words.size !in listOf(12, 15, 18, 21, 24)) return false
+
+            val totalBits = words.size * 11
+            val bitArray = BooleanArray(totalBits)
+
+            for ((i, word) in words.withIndex()) {
+                val index = Bip39Wordlist.WORD_INDEX_MAP[word] ?: return false
+                for (j in 0 until 11) {
+                    val bitPos = 10 - j
+                    val bit = (index shr bitPos) and 1
+                    bitArray[i * 11 + j] = (bit == 1)
+                }
+            }
+
+            val csBits = totalBits / 33
+            val entBits = totalBits - csBits
+            val entropyBytesCount = entBits / 8
+
+            val entropy = ByteArray(entropyBytesCount)
+            for (i in 0 until entBits) {
+                val byteIdx = i / 8
+                val bitPos = 7 - (i % 8)
+                if (bitArray[i]) {
+                    entropy[byteIdx] = (entropy[byteIdx].toInt() or (1 shl bitPos)).toByte()
+                }
+            }
+
+            val md = MessageDigest.getInstance("SHA-256")
+            val hash = md.digest(entropy)
+
+            for (i in 0 until csBits) {
+                val byteIdx = i / 8
+                val bitPos = 7 - (i % 8)
+                val expectedBit = ((hash[byteIdx].toInt() and 0xFF) shr bitPos) and 1 == 1
+                val actualBit = bitArray[entBits + i]
+                if (expectedBit != actualBit) return false
+            }
+
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     fun mnemonicToSeed(mnemonic: String, passphrase: String = ""): ByteArray {

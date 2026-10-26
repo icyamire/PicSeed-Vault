@@ -6,6 +6,7 @@ import com.icyamire.valut.crypto.DeterministicSeedEngine
 import com.icyamire.valut.crypto.Keccak256
 import com.icyamire.valut.crypto.Ripemd160
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -14,49 +15,82 @@ import java.io.ByteArrayInputStream
 class CryptoEngineTest {
 
     @Test
-    fun testBip39WordlistSize() {
+    fun testBip39WordlistSizeAndOrder() {
         assertEquals(2048, Bip39Wordlist.WORDS.size)
         assertEquals(2048, Bip39Wordlist.WORDS.distinct().size)
         for (i in 0 until Bip39Wordlist.WORDS.size - 1) {
             val w1 = Bip39Wordlist.WORDS[i]
             val w2 = Bip39Wordlist.WORDS[i + 1]
-            if (w1 >= w2) {
-                println("Out of order at index $i: $w1 >= $w2 (index ${i+1})")
-            }
+            assertTrue("Wordlist out of order at index $i: $w1 >= $w2", w1 < w2)
+        }
+        assertEquals("abandon", Bip39Wordlist.WORDS[0])
+        assertEquals("legal", Bip39Wordlist.WORDS[1019])
+        assertEquals("letter", Bip39Wordlist.WORDS[1028])
+        assertEquals("zoo", Bip39Wordlist.WORDS[2047])
+    }
+
+    @Test
+    fun testBip39OfficialTrezorTestVectors() {
+        val testCases = listOf(
+            // 16 bytes entropy (128 bits = 12 words)
+            "00000000000000000000000000000000" to
+                    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f" to
+                    "legal winner thank year wave sausage worth useful legal winner thank yellow",
+            "80808080808080808080808080808080" to
+                    "letter advice cage absurd amount doctor acoustic avoid letter advice cage above",
+            "ffffffffffffffffffffffffffffffff" to
+                    "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong",
+
+            // 32 bytes entropy (256 bits = 24 words)
+            "0000000000000000000000000000000000000000000000000000000000000000" to
+                    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
+            "7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f" to
+                    "legal winner thank year wave sausage worth useful legal winner thank year wave sausage worth useful legal winner thank year wave sausage worth title",
+            "8080808080808080808080808080808080808080808080808080808080808080" to
+                    "letter advice cage absurd amount doctor acoustic avoid letter advice cage absurd amount doctor acoustic avoid letter advice cage absurd amount doctor acoustic bless",
+            "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" to
+                    "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo vote"
+        )
+
+        for ((entropyHex, expectedMnemonic) in testCases) {
+            val entropy = entropyHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+            val mnemonic = Bip39.entropyToMnemonic(entropy)
+            assertEquals("Failed for entropy $entropyHex", expectedMnemonic, mnemonic)
+            assertTrue("Validation failed for valid mnemonic: $mnemonic", Bip39.validateMnemonic(mnemonic))
         }
     }
 
     @Test
-    fun testBip39TestVector3() {
-        val entropy = "7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f".chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-        val mnemonic = Bip39.entropyToMnemonic(entropy)
-        assertEquals("legal winner text year wave sausage worth useful legal winner text yellow", mnemonic)
+    fun testBip39ValidateMnemonic() {
+        // Valid 12-word mnemonic
+        val valid12 = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        assertTrue(Bip39.validateMnemonic(valid12))
 
-        val seed = Bip39.mnemonicToSeed(mnemonic, "TREZOR")
-        val seedHex = seed.joinToString("") { "%02x".format(it) }
-        val spec = javax.crypto.spec.PBEKeySpec(mnemonic.toCharArray(), "mnemonicTREZOR".toByteArray(Charsets.UTF_8), 2048, 512)
-        val skf = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512")
-        val expectedSeedHex = skf.generateSecret(spec).encoded.joinToString("") { "%02x".format(it) }
+        // Valid 24-word mnemonic
+        val valid24 = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo vote"
+        assertTrue(Bip39.validateMnemonic(valid24))
 
-        assertEquals(expectedSeedHex, seedHex)
-    }
+        // Generated mnemonics from DeterministicSeedEngine
+        val engine = DeterministicSeedEngine()
+        val streams = listOf(ByteArrayInputStream("test seed generator content".toByteArray(Charsets.UTF_8)))
+        val gen12 = engine.generateFromStreams(streams, "1234", mnemonicWordCount = 12)
+        assertTrue(Bip39.validateMnemonic(gen12.mnemonic))
 
-    @Test
-    fun testBip39TestVector4_24Words() {
-        val entropy = "8080808080808080808080808080808080808080808080808080808080808080".chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-        val mnemonic = Bip39.entropyToMnemonic(entropy)
-        assertEquals(
-            "letter advice call absurd amused doctor acoustic awake letter advice call absurd amused doctor acoustic awake letter advice call absurd amused doctor acoustic blood",
-            mnemonic
-        )
+        val gen24 = engine.generateFromStreams(streams, "1234", mnemonicWordCount = 24)
+        assertTrue(Bip39.validateMnemonic(gen24.mnemonic))
 
-        val seed = Bip39.mnemonicToSeed(mnemonic, "TREZOR")
-        val seedHex = seed.joinToString("") { "%02x".format(it) }
-        val spec = javax.crypto.spec.PBEKeySpec(mnemonic.toCharArray(), "mnemonicTREZOR".toByteArray(Charsets.UTF_8), 2048, 512)
-        val skf = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512")
-        val expectedSeedHex = skf.generateSecret(spec).encoded.joinToString("") { "%02x".format(it) }
+        // Invalid word count (11 words)
+        val invalidWordCount = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
+        assertFalse(Bip39.validateMnemonic(invalidWordCount))
 
-        assertEquals(expectedSeedHex, seedHex)
+        // Invalid word not in BIP-39 wordlist
+        val invalidWord = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon satoshi"
+        assertFalse(Bip39.validateMnemonic(invalidWord))
+
+        // Corrupted checksum (12th word replaced with 'abandon' instead of 'about')
+        val invalidChecksum = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
+        assertFalse(Bip39.validateMnemonic(invalidChecksum))
     }
 
     @Test

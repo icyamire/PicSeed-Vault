@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Valut"
+rootProject.name = "PicSeed Vault"
 include(":app")
